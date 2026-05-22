@@ -624,19 +624,24 @@
     if (taxableAssets === 0) return { min: 0, max: 0 };
     if (hasSpouse) {
       const legalSpouseShare = heirCount === 0 ? 1 : SPOUSE_SHARE[selectedPattern];
+      const eachOtherShare   = heirCount > 0 ? (1 - legalSpouseShare) / heirCount : 0;
       const surcharge = selectedPattern === 'C' ? 1.2 : 1.0;
-      let maxTax;
+      // 相続税の総額：法定相続分で按分して計算
+      let totalInheritanceTax;
       if (heirCount === 0) {
-        maxTax = Math.round(calcTax(taxableAssets));
+        totalInheritanceTax = calcTax(taxableAssets);
       } else {
-        maxTax = Math.round(calcTax(taxableAssets / heirCount) * surcharge * heirCount);
+        const spouseTax    = calcTax(taxableAssets * legalSpouseShare);
+        const eachOtherTax = calcTax(taxableAssets * eachOtherShare) * surcharge;
+        totalInheritanceTax = spouseTax + eachOtherTax * heirCount;
       }
+      const maxTax = Math.round(totalInheritanceTax);
       let minTax;
       if (heirCount === 0) {
         minTax = 0;
       } else {
         const reliefLimit = Math.max(netAssets * legalSpouseShare, 16000);
-        minTax = netAssets <= reliefLimit ? 0 : Math.round(calcTax(taxableAssets) * (netAssets - reliefLimit) / netAssets);
+        minTax = netAssets <= reliefLimit ? 0 : Math.round(totalInheritanceTax * (netAssets - reliefLimit) / netAssets);
       }
       return { min: minTax, max: maxTax };
     } else {
@@ -715,28 +720,30 @@
     const eachOtherShare   = heirCount > 0 ? (1 - legalSpouseShare) / heirCount : 0;
     const surcharge        = selectedPattern === 'C' ? 1.2 : 1.0;
 
-    // 最高額：配偶者のみ→配偶者が全額取得・軽減なし／配偶者以外あり→配偶者以外が全額取得・軽減なし
-    let maxTax;
+    // 相続税の総額：法定相続分で按分して計算
+    let totalInheritanceTax;
     if (heirCount === 0) {
-      maxTax = Math.round(calcTax(taxableAssets));
+      totalInheritanceTax = calcTax(taxableAssets);
     } else {
-      const eachBase = taxableAssets / heirCount;
-      maxTax = Math.round(calcTax(eachBase) * surcharge * heirCount);
+      const spouseTax    = calcTax(taxableAssets * legalSpouseShare);
+      const eachOtherTax = calcTax(taxableAssets * eachOtherShare) * surcharge;
+      totalInheritanceTax = spouseTax + eachOtherTax * heirCount;
     }
+
+    // 最高額：配偶者以外が全額取得・軽減なし → 相続税の総額がそのまま納付額
+    const maxTax = Math.round(totalInheritanceTax);
 
     // 最低額：配偶者のみ→軽減適用で0／配偶者以外あり→配偶者が全額取得・軽減を最大限適用
     let minTax;
     if (heirCount === 0) {
-      // 配偶者が全額取得、軽減限度=max(netAssets,16000)≥netAssets → 常に0
       minTax = 0;
     } else {
-      const taxIfSpouseAll = calcTax(taxableAssets);
       // 軽減限度額 = max(法定相続分相当額, 1億6千万)
-      const reliefLimit  = Math.max(netAssets * legalSpouseShare, 16000);
+      const reliefLimit = Math.max(netAssets * legalSpouseShare, 16000);
       if (netAssets <= reliefLimit) {
         minTax = 0;
       } else {
-        minTax = Math.round(taxIfSpouseAll * (netAssets - reliefLimit) / netAssets);
+        minTax = Math.round(totalInheritanceTax * (netAssets - reliefLimit) / netAssets);
       }
     }
 
